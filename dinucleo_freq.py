@@ -9,19 +9,11 @@ import numpy as np
 
 def nucleotide_freq(genome):
     
-    nucl_counts = {}
+    nucleotides = {"A":0, "C":0, "G":0, "T":0}
     
     for dna_forward_seq in tqdm(genome):
-
-        dna_forward_seq = Seq(dna_forward_seq)
-
-        nucleotides = ["A", "C", "G", "T"]
-
         for nucleotide in nucleotides:
-            if nucleotide in nucl_counts:
-                nucl_counts[nucleotide] += dna_forward_seq.count(nucleotide)
-            else:
-                nucl_counts[nucleotide] = dna_forward_seq.count(nucleotide)
+                nucleotides[nucleotide] = dna_forward_seq.count(nucleotide)
 
     a = nucl_counts["A"] 
     t = nucl_counts["T"]
@@ -33,12 +25,12 @@ def nucleotide_freq(genome):
     nucl_counts["C"] += g
     nucl_counts["G"] += c 
     
-    total = sum(nucl_counts.values())
+    total = sum(nucleotides.values())
 
-    for nucleotide in nucl_counts.keys():
-        nucl_counts[nucleotide] = round(nucl_counts[nucleotide] / total, 4) 
+    for nucleotide in nucleotides:
+        nucleotides[nucleotide] = round(nucleotides[nucleotide] / total, 4) 
     
-    return nucl_counts
+    return nucleotides
 
 
 def dinucleotide_freq_theo(nucl_freq):
@@ -67,7 +59,7 @@ def dinucleotide_freq(genome):
 
         for i in tqdm(range(len(dna_forward_seq)-1)):
             di_forward = dna_forward_seq[i:i+2]
-            di_reversed = dna_forward_seq[i:i+2].reverse_complement()
+            di_reversed = di_forward.reverse_complement()
             if di_forward in di_counts:
                 di_counts[di_forward] += 1
             if di_reversed in di_counts:
