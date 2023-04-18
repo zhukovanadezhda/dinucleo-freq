@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 import gzip
+import tarfile
 
 
 def count_nucleotides(seq):
@@ -59,7 +60,7 @@ def count_dinucleotides(seq):
 
 def obs_vs_theo_dinuc(gzipfastafile):
     
-    print(f"Analysing {gzipfastafile.split('.')[0]} genome \n")
+    #print(f"Analysing {gzipfastafile.split('.')[0]} genome \n")
     
     total_di = 0
     total_nu = 0
@@ -67,9 +68,9 @@ def obs_vs_theo_dinuc(gzipfastafile):
                 "TC":0, "GC":0, "CC":0, "AC":0, "TA":0, "GA":0, "CA":0, "AA":0}
     nucl_count = {"A":0, "C":0, "G":0, "T":0}
 
-    #with tarfile.open(gzipfastafile, "r") as handle:
     with gzip.open(gzipfastafile, "rt") as handle:
         for record in SeqIO.parse(handle, "fasta"):
+            print(record.id)
             dinuc = count_dinucleotides(record)
             for key in dinuc:
                 di_count[key] += dinuc[key]
