@@ -1,21 +1,31 @@
 from Bio.Seq import Seq
-from Bio import Entrez, SeqIO
+from Bio import SeqIO
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from scipy.stats import ttest_rel
 import numpy as np
+import random
 import gzip
 import tarfile
 
 
+def count_fasta_records(gzipfastafile):
+    count = 0
+    with gzip.open(gzipfastafile, "rt") as handle:
+        for record in SeqIO.parse(handle, "fasta"):
+            count += 1
+            
+    return count
+
+
 def count_nucleotides(seq):
     
-    nucl_counts = {"A":0, "C":0, "G":0, "T":0}
+    nucl_counts = {"A": 0, "C": 0, "G": 0, "T": 0}
     
     for nucleotide in nucl_counts:
         nucl_counts[nucleotide] = seq.count(nucleotide)
     
-
     a = nucl_counts["A"] 
     t = nucl_counts["T"]
     c = nucl_counts["C"]
@@ -25,7 +35,6 @@ def count_nucleotides(seq):
     nucl_counts["T"] += a
     nucl_counts["C"] += g
     nucl_counts["G"] += c 
-    
     
     return nucl_counts
 
@@ -43,13 +52,15 @@ def count_dinucleotide_freq_theo(nucl_freq):
 
 def count_dinucleotides(seq):
 
-    di_counts = {"TT":0, "GT":0, "CT":0, "AT":0, "TG":0, "GG":0, "CG":0, "AG":0, "TC":0, "GC":0, "CC":0, "AC":0, "TA":0, "GA":0, "CA":0, "AA":0}
+    di_counts = {"TT": 0, "GT": 0, "CT": 0, "AT": 0, "TG": 0, "GG": 0, "CG": 0, "AG": 0, "TC": 0, "GC": 0, "CC": 0, "AC": 0, "TA": 0, "GA": 0, "CA": 0, "AA": 0}
+    compliments = {"A": "T", "T": "A", "C": "G", "G": "C"}
     
-    compliments = {'A':'T', 'T':'A', 'C':'G', 'G':'C'}
+    try:
+        dna_forward_seq = seq.seq
+    except:
+        dna_forward_seq = seq
 
-    dna_forward_seq = seq.seq
-
-    for i in tqdm(range(len(dna_forward_seq)-1)):
+    for i in range(len(dna_forward_seq)-1):
         di_forward = dna_forward_seq[i:i+2]
         if di_forward[0] in compliments and di_forward[1] in compliments:
             di_reversed = compliments[di_forward[1]]+compliments[di_forward[0]]
@@ -58,19 +69,33 @@ def count_dinucleotides(seq):
 
     return di_counts
 
+
 def obs_vs_theo_dinuc(gzipfastafile):
     
-    #print(f"Analysing {gzipfastafile.split('.')[0]} genome \n")
+    try:
+        print(f"😼Analysing {gzipfastafile.split('.')[0].split('_')[0]+' '+gzipfastafile.split('.')[0].split('_')[1]} genome")
+    except:
+        print("😼Analysing " + str(gzipfastafile).split("'")[1][:-4].split("_")[0] + " " + str(gzipfastafile).split("'")[1][:-4].split("_")[1] + " genome")
+    
+    nb_rec = count_fasta_records(gzipfastafile)
+    rest = nb_rec
+    print(f"🙀Total number of records: {nb_rec}")    
     
     total_di = 0
     total_nu = 0
-    di_count = {"TT":0, "GT":0, "CT":0, "AT":0, "TG":0, "GG":0, "CG":0, "AG":0, 
-                "TC":0, "GC":0, "CC":0, "AC":0, "TA":0, "GA":0, "CA":0, "AA":0}
-    nucl_count = {"A":0, "C":0, "G":0, "T":0}
-
+    di_count = {"TT": 0, "GT": 0, "CT": 0, "AT": 0, "TG": 0, "GG": 0, "CG": 0, "AG": 0, 
+                "TC": 0, "GC": 0, "CC": 0, "AC": 0, "TA": 0, "GA": 0, "CA": 0, "AA": 0}
+    nucl_count = {"A": 0, "C": 0, "G": 0, "T": 0}
+    
     with gzip.open(gzipfastafile, "rt") as handle:
         for record in SeqIO.parse(handle, "fasta"):
-            print(record.id)
+            rest -= 1
+            if nb_rec < 20:
+                print(f"😸Analysing record {nb_rec-rest}: {record.id}, sequence length: {len(record.seq)}, number of records rest: {rest}")
+            else:
+                if (nb_rec-rest) % 20 == 0:
+                    print(f"😸Analysing record {nb_rec-rest}: {record.id}, sequence length: {len(record.seq)}, number of records rest: {rest}\n...")
+             
             dinuc = count_dinucleotides(record)
             for key in dinuc:
                 di_count[key] += dinuc[key]
@@ -78,22 +103,87 @@ def obs_vs_theo_dinuc(gzipfastafile):
             for key in nuc:
                 nucl_count[key] += nuc[key]
                 
+            #if len(record) > 1000000:
+            #    test_significance(record)
+                
+                
     total_di = sum(di_count.values())
     total_nu = sum(nucl_count.values())  
     
-    di_freq = {"TT":0, "GT":0, "CT":0, "AT":0, "TG":0, "GG":0, "CG":0, "AG":0, 
-                "TC":0, "GC":0, "CC":0, "AC":0, "TA":0, "GA":0, "CA":0, "AA":0}
+    di_freq = {"TT": 0, "GT": 0, "CT": 0, "AT": 0, "TG": 0, "GG": 0, "CG": 0, "AG": 0, 
+                "TC": 0, "GC": 0, "CC": 0, "AC": 0, "TA": 0, "GA": 0, "CA": 0, "AA": 0}
+    
     for di in sorted(di_count.keys()):
         di_freq[di] = round(di_count[di] / total_di, 4) 
 
-    nucl_freq = {"A":0, "C":0, "G":0, "T":0} 
+    nucl_freq = {"A": 0, "C": 0, "G": 0, "T": 0} 
     for nucl in nucl_count:
         nucl_freq[nucl] = round(nucl_count[nucl] / total_nu, 4)  
     di_freq_theo = count_dinucleotide_freq_theo(nucl_freq)
-
-    
-    #print(f'The genome consists of {len(genome)} chromosomes or scaffolds of total size of {round(n/1000000,3)} Mb\n')
- 
     
     return di_freq, di_freq_theo
 
+
+def test_significance(record):
+    
+    print(f"😸Sampling {record.id}")
+    
+    sequence = record.seq
+
+    samples = []
+    sample_index = random.sample(range(len(sequence)-100000), 10)
+    sample = ''
+    for i in sample_index:
+        samples.append(sequence[i:i+100000])
+        
+    di_freq_distribution = {"TT": [], "GT": [], "CT": [], "AT": [], "TG": [], "GG": [], "CG": [], "AG": [], 
+                                "TC": [], "GC": [], "CC": [], "AC": [], "TA": [], "GA": [], "CA": [], "AA": []}
+        
+    di_freq_theo_distribution = {"TT": [], "GT": [], "CT": [], "AT": [], "TG": [], "GG": [], "CG": [], "AG": [], 
+                                     "TC": [], "GC": [], "CC": [], "AC": [], "TA": [], "GA": [], "CA": [], "AA": []}
+    print(f"😻Sampling completed")
+    print(f"😸Analising samples")
+
+    for i in tqdm(range(len(samples))):
+        sample = samples[i]
+        total_di = 0
+        total_nu = 0
+        di_count = {"TT": 0, "GT": 0, "CT": 0, "AT": 0, "TG": 0, "GG": 0, "CG": 0, "AG": 0, 
+                    "TC": 0, "GC": 0, "CC": 0, "AC": 0, "TA": 0, "GA": 0, "CA": 0, "AA": 0}
+        nucl_count = {"A": 0, "C": 0, "G": 0, "T": 0}
+    
+        dinuc = count_dinucleotides(sample)
+        for key in dinuc:
+            di_count[key] += dinuc[key]
+        nuc = count_nucleotides(sample)
+        for key in nuc:
+            nucl_count[key] += nuc[key]
+                
+        total_di = sum(di_count.values())
+        total_nu = sum(nucl_count.values())  
+
+        di_freq = {"TT": 0, "GT": 0, "CT": 0, "AT": 0, "TG": 0, "GG": 0, "CG": 0, "AG": 0, 
+                    "TC": 0, "GC": 0, "CC": 0, "AC": 0, "TA": 0, "GA": 0, "CA": 0, "AA": 0}
+
+        for di in sorted(di_count.keys()):
+            di_freq[di] = round(di_count[di] / total_di, 4) 
+
+        nucl_freq = {"A": 0, "C": 0, "G": 0, "T": 0} 
+        for nucl in nucl_count:
+            nucl_freq[nucl] = round(nucl_count[nucl] / total_nu, 4)  
+        di_freq_theo = count_dinucleotide_freq_theo(nucl_freq)
+        for key in di_freq:
+            di_freq_distribution[key].append(di_freq[key])
+            di_freq_theo_distribution[key].append(di_freq_theo[key])
+    
+    for key in di_freq_distribution:
+        t_stat, p_val = ttest_rel(di_freq_distribution[key], di_freq_theo_distribution[key])
+
+        print(f"Paired t-test results for {key}:")
+        if p_val < 0.05:
+            print(f"The difference is significant (p-value: {p_val})\n")
+        else:
+            print(f"The difference is not significant (p-value: {p_val})\n")
+
+    
+    
