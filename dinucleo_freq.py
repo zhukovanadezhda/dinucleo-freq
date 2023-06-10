@@ -1,16 +1,32 @@
+import gzip
+import json
+import requests
+
 from Bio.Seq import Seq
 from Bio import SeqIO
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from scipy.stats import ttest_rel
 import numpy as np
-import random
-import gzip
+import pandas as pd
+from scipy.stats import ttest_rel
+from scipy.stats import chi2_contingency
 import tarfile
+from tqdm import tqdm
 
 
 def count_fasta_records(gzipfastafile):
+    """Calculating the number of records in a .fa.gz file.
+
+    Parameters
+    ----------
+    gzipfastafile : str
+        .fa.gz file with genome records.
+
+    Returns
+    -------
+    count : int
+        The number of records.
+    """
     count = 0
     with gzip.open(gzipfastafile, "rt") as handle:
         for record in SeqIO.parse(handle, "fasta"):
@@ -20,6 +36,18 @@ def count_fasta_records(gzipfastafile):
 
 
 def count_nucleotides(seq):
+    """Calculating the number nucleotides of each type in the sequence.
+
+    Parameters
+    ----------
+    seq : str
+        Nucleotide sequence.
+
+    Returns
+    -------
+    nucl_counts : dic
+        The number of nucleotides in the sequence for each nucleotide.
+    """
     
     nucl_counts = {"A": 0, "C": 0, "G": 0, "T": 0}
     
@@ -40,7 +68,19 @@ def count_nucleotides(seq):
 
 
 def count_dinucleotide_freq_theo(nucl_freq):
+    """Calculating the theoretical dinucleotide frequency for each type of dinucleotide.
+
+    Parameters
+    ----------
+    nucl_freq : dic
+        Nucleotide frequency for each type of nucleotide.
+
+    Returns
+    -------
+    theo_freq : dic
+        Theoretical dinucleotide frequency for each type of dinucleotide.
     
+    """
     dinucleotides = ["TT", "GT", "CT", "AT", "TG", "GG", "CG", "AG", "TC", "GC", "CC", "AC", "TA", "GA", "CA", "AA"]
     theo_freq = {}
     
@@ -51,6 +91,18 @@ def count_dinucleotide_freq_theo(nucl_freq):
 
 
 def count_dinucleotides(seq):
+    """Calculating the number dinucleotides of each type in the sequence.
+
+    Parameters
+    ----------
+    seq : str
+        Nucleotide sequence.
+
+    Returns
+    -------
+    di_counts : dic
+        The number of dinucleotides in the sequence for each nucleotide.
+    """
 
     di_counts = {"TT": 0, "GT": 0, "CT": 0, "AT": 0, "TG": 0, "GG": 0, "CG": 0, "AG": 0, "TC": 0, "GC": 0, "CC": 0, "AC": 0, "TA": 0, "GA": 0, "CA": 0, "AA": 0}
     compliments = {"A": "T", "T": "A", "C": "G", "G": "C"}
@@ -71,6 +123,20 @@ def count_dinucleotides(seq):
 
 
 def obs_vs_theo_dinuc(gzipfastafile):
+    """Calculating the theoretical and observed dinucleotide frequency for each type of dinucleotide from a .fa.gz file.
+
+    Parameters
+    ----------
+    gzipfastafile : str
+        .fa.gz file with genome records.
+
+    Returns
+    -------
+    di_freq : dic
+        Observed dinucleotide frequency for each type of dinucleotide.
+    di_freq_theo : dic 
+        Theoretical dinucleotide frequency for each type of dinucleotide.
+    """
     
     try:
         print(f"😼Analysing {gzipfastafile.split('.')[0].split('_')[0]+' '+gzipfastafile.split('.')[0].split('_')[1]} genome")
@@ -93,7 +159,7 @@ def obs_vs_theo_dinuc(gzipfastafile):
             if nb_rec < 20:
                 print(f"😸Analysing record {nb_rec-rest}: {record.id}, sequence length: {len(record.seq)}, number of records rest: {rest}")
             else:
-                if (nb_rec-rest) % 20 == 0:
+                if (nb_rec-rest-1) % round(nb_rec/20, 0) == 0:
                     print(f"😸Analysing record {nb_rec-rest}: {record.id}, sequence length: {len(record.seq)}, number of records rest: {rest}\n...")
              
             dinuc = count_dinucleotides(record)
@@ -120,21 +186,30 @@ def obs_vs_theo_dinuc(gzipfastafile):
     for nucl in nucl_count:
         nucl_freq[nucl] = round(nucl_count[nucl] / total_nu, 4)  
     di_freq_theo = count_dinucleotide_freq_theo(nucl_freq)
+
+    print(f"😻Completed")
     
     return di_freq, di_freq_theo
 
 
 def test_significance(record):
+    """Testing the significance of the difference between observed and theoretical dinucleotide frequencies.
+
+    Parameters
+    ----------
+    record : record (biopython)
+        A fasta record.
+    """
     
     print(f"😸Sampling {record.id}")
     
     sequence = record.seq
 
     samples = []
-    sample_index = random.sample(range(len(sequence)-100000), 10)
+    sample_index = random.sample(range(len(sequence)-1000), 1000)
     sample = ''
     for i in sample_index:
-        samples.append(sequence[i:i+100000])
+        samples.append(sequence[i:i+1000])
         
     di_freq_distribution = {"TT": [], "GT": [], "CT": [], "AT": [], "TG": [], "GG": [], "CG": [], "AG": [], 
                                 "TC": [], "GC": [], "CC": [], "AC": [], "TA": [], "GA": [], "CA": [], "AA": []}
@@ -177,9 +252,16 @@ def test_significance(record):
             di_freq_theo_distribution[key].append(di_freq_theo[key])
     
     for key in di_freq_distribution:
-        t_stat, p_val = ttest_rel(di_freq_distribution[key], di_freq_theo_distribution[key])
+        
+        observed = np.array(di_freq_distribution[key])
+        theo = np.array(di_freq_theo_distribution[key]) 
 
-        print(f"Paired t-test results for {key}:")
+        contingency_table = np.array([observed, theo])
+
+        statistic, p_val, degrees_of_freedom, expected_values = chi2_contingency(contingency_table)
+
+
+        print(f"Chi2 test results for {key}:")
         if p_val < 0.05:
             print(f"The difference is significant (p-value: {p_val})\n")
         else:
